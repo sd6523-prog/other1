@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行動盤點同步助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-50 pb-32 text-slate-900">
+
+    <!-- 導航欄 -->
+    <nav class="bg-white border-b sticky top-0 z-40 px-4 py-3 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-2">
+            <div class="bg-indigo-600 p-1.5 rounded-lg text-white">
+                <i class="fas fa-box"></i>
+            </div>
+            <h1 class="font-bold text-slate-800">行動盤點助手</h1>
+        </div>
+        <div id="syncStatus" class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">連線中...</div>
+    </nav>
+
+    <main class="max-w-2xl mx-auto p-4">
+        <!-- 頂部按鈕 -->
+        <div class="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
+            <button onclick="handleClearAllQty()" class="flex items-center gap-2 bg-white border border-orange-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-orange-500 active:bg-orange-50 transition-colors">
+                <i class="fas fa-eraser"></i> 全部歸零
+            </button>
+            <button onclick="showModal('resetConfirmModal')" class="flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50 transition-colors">
+                <i class="fas fa-sync-alt"></i> 重置清單
+            </button>
+            <button onclick="handleExportExcel()" class="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 ml-auto transition-colors">
+                <i class="fas fa-file-excel text-emerald-500"></i> 匯出 Excel
+            </button>
+        </div>
+
+        <!-- 搜尋與過濾 -->
+        <div class="space-y-4 mb-6">
+            <div class="relative">
+                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input 
+                    type="text" 
+                    id="searchInput"
+                    placeholder="搜尋品名、編碼..." 
+                    class="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm"
+                    oninput="renderItems()"
+                />
+            </div>
+            <div id="categoryTabs" class="flex gap-1.5 overflow-x-auto no-scrollbar py-1"></div>
+        </div>
+
+        <!-- 品項列表 -->
+        <div id="inventoryList" class="grid gap-3">
+            <div class="flex flex-col items-center justify-center py-20 text-slate-400">
+                <i class="fas fa-circle-notch fa-spin mb-4 text-3xl text-indigo-500"></i>
+                <span class="text-sm font-medium">正在準備雲端資料庫...</span>
+                <p class="text-[10px] mt-2 opacity-50">初次啟動可能需要較長時間</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- 底部操作欄 -->
+    <div class="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur-xl border-t p-4 flex gap-3 pb-10 z-40 shadow-2xl">
+        <button onclick="showModal('addItemModal')" class="w-14 h-14 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center shadow-sm active:scale-90 transition-transform shrink-0">
+            <i class="fas fa-plus text-xl"></i>
+        </button>
+        <button 
+            id="submitBtn"
+            onclick="handleSubmitConfirm()" 
+            class="flex-1 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all bg-slate-200 text-slate-400 pointer-events-none"
+        >
+            <i class="fas fa-paper-plane"></i> 提交本次盤點
+        </button>
+    </div>
+
+    <!-- 彈窗內容：重置確認 -->
+    <div id="resetConfirmModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
+            <h2 class="text-xl font-black mb-4 text-slate-800">資料重置確認</h2>
+            <p class="text-sm text-slate-500 mb-6">這將會清除雲端上所有的修改，並回復成原始的圖片清單。</p>
+            <div class="grid gap-2">
+                <button onclick="initializeDatabase()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold active:scale-95 transition-transform">確認回復預設值</button>
+                <button onclick="closeModal('resetConfirmModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 彈窗內容：新增品項 -->
+    <div id="addItemModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
+            <h2 class="text-xl font-black mb-6 text-slate-800">新增品項</h2>
+            <div class="space-y-4">
+                <input id="new_name" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="品項名稱" />
+                <div class="grid grid-cols-2 gap-4">
+                    <input id="new_sku" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="編碼" />
+                    <input id="new_cat" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="類別" />
+                </div>
+                <button onclick="handleAddItem()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg">確認新增</button>
+                <button onclick="closeModal('addItemModal')" class="w-full py-4 text-slate-400 font-bold">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提交確認彈窗 -->
+    <div id="submitConfirmModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
+            <h2 class="text-xl font-black mb-4 text-slate-800">提交與歸零</h2>
+            <div id="submitPreviewList" class="max-h-40 overflow-y-auto mb-6 space-y-2"></div>
+            <button onclick="handleSubmitInventory()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold mb-2">確認提交並重設數量</button>
+            <button onclick="closeModal('submitConfirmModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">返回</button>
+        </div>
+    </div>
+
+    <script>
+        // 開發模式：使用 localStorage 替代 Firebase
+        let items = [];
+        let selectedCategory = '全部';
+
+        const DEFAULT_LIST = [
+            { sku: "93050399", category: "貼紙", name: "標籤貼紙80*63mm/1500張(A款)-理用", order: 1 },
+            { sku: "93050399", category: "貼紙", name: "標籤貼紙35*25mm/3500張理用", order: 2 },
+            { sku: "93050399", category: "貼紙", name: "公板貼(一般)", order: 3 },
+            { sku: "93050399", category: "貼紙", name: "苔藍貼(可擦拭)", order: 4 },
+            { sku: "93050399", category: "碳帶", name: "10M碳帶", order: 5 },
+            { sku: "93050399", category: "碳帶", name: "8M碳帶", order: 6 },
+            { sku: "93050399", category: "碳帶", name: "4M碳帶", order: 7 },
+            { sku: "93120201", category: "碳帶", name: "EPSON LQ-690碳帶", order: 8 },
+            { sku: "93050399", category: "背心袋", name: "1斤背心袋", order: 9 },
+            { sku: "93050399", category: "背心袋", name: "3斤背心袋", order: 10 },
+            { sku: "93050399", category: "背心袋", name: "5斤背心袋", order: 11 },
+            { sku: "93050399", category: "OPP", name: "OPP-1斤透明袋", order: 12 },
+            { sku: "93050399", category: "OPP", name: "OPP-2斤透明袋", order: 13 },
+            { sku: "93050399", category: "OPP", name: "OPP-3斤透明袋", order: 14 },
+            { sku: "93050399", category: "PE", name: "PE-1斤透明袋(蒜泥用)", order: 15 },
+            { sku: "93050399", category: "PE", name: "PE-3斤透明袋(生菜用)", order: 16 },
+            { sku: "93050399", category: "PE", name: "PE-5斤透明袋", order: 17 },
+            { sku: "93050399", category: "PE", name: "PE-7斤透明袋(生菜用)", order: 18 },
+            { sku: "93050399", category: "PE", name: "PE-洞洞袋", order: 19 },
+            { sku: "93050399", category: "袋子", name: "大蔥/山藥專用袋", order: 20 },
+            { sku: "93050399", category: "袋子", name: "銀耳袋", order: 21 },
+            { sku: "93050399", category: "袋子", name: "日燦袋", order: 22 },
+            { sku: "93050399", category: "袋子", name: "杏鮑菇袋(裝大5用)", order: 23 },
+            { sku: "93050399", category: "袋子", name: "香菇袋", order: 24 },
+            { sku: "93050399", category: "袋子", name: "苔藍大袋", order: 25 },
+            { sku: "93129999", category: "膠帶", name: "透明膠帶(寬)", order: 26 },
+            { sku: "93129999", category: "膠帶", name: "紅色膠帶", order: 27 },
+            { sku: "93129999", category: "膠帶", name: "蔬果膠帶", order: 28 },
+            { sku: "93129999", category: "膠帶", name: "束口機膠帶-紅色", order: 29 },
+            { sku: "93129999", category: "膠帶", name: "束口機膠帶-黃色", order: 30 },
+            { sku: "93129999", category: "膠帶", name: "束口機膠帶-藍色", order: 31 },
+            { sku: "93129999", category: "膠帶", name: "束口機膠帶-白色", order: 32 },
+            { sku: "93129999", category: "膠帶", name: "束口機膠帶-綠色", order: 33 },
+            { sku: "93050399", category: "膠帶", name: "透明膠帶(無痕)", order: 34 },
+            { sku: "93129999", category: "文具", name: "油性原子筆", order: 35 },
+            { sku: "93129999", category: "文具", name: "雄獅230R白板筆補充液", order: 36 },
+            { sku: "93129999", category: "文具", name: "雄獅白板筆230", order: 37 },
+            { sku: "94320799", category: "文具", name: "報表紙", order: 38 },
+            { sku: "93129999", category: "文具", name: "美工刀", order: 39 },
+            { sku: "93050399", category: "文具", name: "立可帶", order: 40 },
+            { sku: "93050399", category: "文具", name: "立可帶補充", order: 41 },
+            { sku: "93050399", category: "文具", name: "螢光筆", order: 42 },
+            { sku: "93050399", category: "文具", name: "美工刀刀片", order: 43 },
+            { sku: "93320201", category: "手套", name: "PVC手套XL", order: 44 },
+            { sku: "93320201", category: "手套", name: "PVC手套L", order: 45 },
+            { sku: "93320201", category: "手套", name: "PVC手套M", order: 46 },
+            { sku: "93320201", category: "手套", name: "PVC手套S", order: 47 },
+            { sku: "94320799", category: "其他", name: "拋棄式衛生帽", order: 48 },
+            { sku: "94320799", category: "其他", name: "強諾抗菌洗手乳", order: 49 },
+            { sku: "94320799", category: "其他", name: "圍裙", order: 50 },
+            { sku: "94320799", category: "其他", name: "OK蹦(2.5CM*7.2CM)*2", order: 51 },
+            { sku: "94320799", category: "其他", name: "OK蹦(5CM*7CM)*2", order: 52 },
+            { sku: "93129999", category: "其他", name: "抹布", order: 53 },
+            { sku: "94320799", category: "其他", name: "浴廁清潔劑", order: 54 }
+        ];
+
+        // 初始化
+        function init() {
+            document.getElementById('syncStatus').innerText = '開發模式';
+            loadFromLocalStorage();
+            renderItems();
+        }
+
+        // 從 localStorage 載入
+        function loadFromLocalStorage() {
+            const stored = localStorage.getItem('inventory-items');
+            if (stored) {
+                items = JSON.parse(stored);
+            } else {
+                items = DEFAULT_LIST.map((item, idx) => ({
+                    id: String(idx),
+                    ...item,
+                    quantity: 0
+                }));
+                saveToLocalStorage();
+            }
+        }
+
+        // 存到 localStorage
+        function saveToLocalStorage() {
+            localStorage.setItem('inventory-items', JSON.stringify(items));
+        }
+
+        // 渲染畫面
+        window.renderItems = () => {
+            const listEl = document.getElementById('inventoryList');
+            const tabsEl = document.getElementById('categoryTabs');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+
+            // 分類導航
+            const cats = ['全部', ...new Set(items.map(i => i.category))];
+            const otherIdx = cats.indexOf('其他');
+            if(otherIdx > -1) {
+                cats.splice(otherIdx, 1);
+                cats.push('其他');
+            }
+
+            tabsEl.innerHTML = cats.map(cat => `
+                <button onclick="window.setCategory('${cat}')" class="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${selectedCategory === cat ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100'}">
+                    ${cat}
+                </button>
+            `).join('');
+
+            // 過濾資料
+            let filtered = items.filter(i => 
+                (i.name + (i.sku || '') + (i.category || '')).toLowerCase().includes(search)
+            );
+            if (selectedCategory !== '全部') {
+                filtered = filtered.filter(i => i.category === selectedCategory);
+            }
+
+            // 排序
+            filtered.sort((a, b) => {
+                const isAOther = a.category === '其他';
+                const isBOther = b.category === '其他';
+                if (isAOther && !isBOther) return 1;
+                if (!isAOther && isBOther) return -1;
+                return (a.order || 0) - (b.order || 0);
+            });
+
+            // 渲染列表
+            if (filtered.length === 0) {
+                listEl.innerHTML = `<div class="py-20 text-center text-slate-400 text-sm italic">無項目</div>`;
+            } else {
+                listEl.innerHTML = filtered.map(item => `
+                    <div class="bg-white rounded-2xl p-4 border transition-all flex items-center justify-between shadow-sm ${item.quantity > 0 ? 'border-indigo-400 bg-indigo-50/20' : 'border-slate-100'}">
+                        <div class="flex-1 min-w-0 pr-4">
+                            <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-1">${item.sku || '---'}</div>
+                            <div class="font-bold text-slate-800 text-sm truncate mb-1">${item.name}</div>
+                            <div class="text-[10px] text-slate-400">${item.category}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center bg-slate-50 rounded-xl border p-0.5">
+                                <button onclick="window.updateQty('${item.id}', -1)" class="w-10 h-10 flex items-center justify-center font-bold text-slate-400">-</button>
+                                <span class="w-8 text-center font-black text-sm ${item.quantity > 0 ? 'text-indigo-600' : 'text-slate-300'}">${item.quantity || 0}</span>
+                                <button onclick="window.updateQty('${item.id}', 1)" class="w-10 h-10 flex items-center justify-center font-bold text-slate-400">+</button>
+                            </div>
+                            <button onclick="window.deleteItem('${item.id}')" class="p-2 text-slate-200 hover:text-red-400"><i class="fas fa-trash-alt"></i></button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // 按鈕狀態
+            const hasQty = items.some(i => i.quantity > 0);
+            const subBtn = document.getElementById('submitBtn');
+            if (hasQty) {
+                subBtn.className = "flex-1 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all bg-indigo-600 text-white";
+                subBtn.style.pointerEvents = "auto";
+            } else {
+                subBtn.className = "flex-1 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all bg-slate-200 text-slate-400";
+                subBtn.style.pointerEvents = "none";
+            }
+        };
+
+        // 事件控制
+        window.setCategory = (c) => { selectedCategory = c; renderItems(); };
+        
+        window.updateQty = (id, delta) => {
+            const item = items.find(i => i.id === id);
+            if (item) {
+                item.quantity = Math.max(0, (item.quantity || 0) + delta);
+                saveToLocalStorage();
+                renderItems();
+            }
+        };
+
+        window.deleteItem = (id) => {
+            if(confirm('移除此品項？')) {
+                items = items.filter(i => i.id !== id);
+                saveToLocalStorage();
+                renderItems();
+            }
+        };
+
+        window.initializeDatabase = () => {
+            items = DEFAULT_LIST.map((item, idx) => ({
+                id: String(idx),
+                ...item,
+                quantity: 0
+            }));
+            saveToLocalStorage();
+            renderItems();
+            closeModal('resetConfirmModal');
+        };
+
+        window.handleAddItem = () => {
+            const name = document.getElementById('new_name').value;
+            const sku = document.getElementById('new_sku').value;
+            const cat = document.getElementById('new_cat').value;
+            if(!name) return;
+            items.push({
+                id: String(Date.now()),
+                name, sku, category: cat || '其他', quantity: 0, order: 999
+            });
+            saveToLocalStorage();
+            renderItems();
+            closeModal('addItemModal');
+            document.getElementById('new_name').value = '';
+        };
+
+        window.handleSubmitConfirm = () => {
+            const active = items.filter(i => i.quantity > 0);
+            const preview = document.getElementById('submitPreviewList');
+            preview.innerHTML = active.map(i => `
+                <div class="flex justify-between text-xs p-2 bg-slate-50 rounded-lg">
+                    <span>${i.name}</span>
+                    <span class="font-bold text-indigo-600">x ${i.quantity}</span>
+                </div>
+            `).join('');
+            showModal('submitConfirmModal');
+        };
+
+        window.handleSubmitInventory = () => {
+            const active = items.filter(i => i.quantity > 0);
+            
+            // 記錄到歷史
+            const history = JSON.parse(localStorage.getItem('inventory-history') || '[]');
+            history.push({
+                submitAt: new Date().toISOString(),
+                details: active.map(i => ({ name: i.name, qty: i.quantity }))
+            });
+            localStorage.setItem('inventory-history', JSON.stringify(history));
+
+            // 數量重設
+            items.forEach(i => { if(i.quantity > 0) i.quantity = 0; });
+            saveToLocalStorage();
+            renderItems();
+            closeModal('submitConfirmModal');
+            alert('盤點已提交並重設！');
+        };
+
+        window.handleExportExcel = () => {
+            const data = items.map(i => ({ '編碼': i.sku, '類別': i.category, '品名': i.name, '盤點數量': i.quantity }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+            XLSX.writeFile(wb, `盤點表_${new Date().toLocaleDateString()}.xlsx`);
+        };
+
+        window.handleClearAllQty = () => {
+            if(confirm('確定要清除所有數量嗎？')) {
+                items.forEach(i => { i.quantity = 0; });
+                saveToLocalStorage();
+                renderItems();
+            }
+        };
+
+        window.showModal = (id) => document.getElementById(id).classList.remove('hidden');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+
+        // 啟動
+        init();
+    </script>
+</body>
+</html>
