@@ -258,7 +258,7 @@
                         <div class="flex items-center gap-2">
                             <div class="flex items-center bg-slate-50 rounded-xl border p-0.5">
                                 <button onclick="window.updateQty('${item.id}', -1)" class="w-10 h-10 flex items-center justify-center font-bold text-slate-400">-</button>
-                                <span class="w-8 text-center font-black text-sm ${item.quantity > 0 ? 'text-indigo-600' : 'text-slate-300'}">${item.quantity || 0}</span>
+                                <input type="number" value="${item.quantity || 0}" class="w-12 text-center font-black text-sm border-0 bg-white outline-none focus:ring-1 focus:ring-indigo-400" onchange="window.setQty('${item.id}', this.value)" />
                                 <button onclick="window.updateQty('${item.id}', 1)" class="w-10 h-10 flex items-center justify-center font-bold text-slate-400">+</button>
                             </div>
                             <button onclick="window.deleteItem('${item.id}')" class="p-2 text-slate-200 hover:text-red-400"><i class="fas fa-trash-alt"></i></button>
@@ -286,6 +286,16 @@
             const item = items.find(i => i.id === id);
             if (item) {
                 item.quantity = Math.max(0, (item.quantity || 0) + delta);
+                saveToLocalStorage();
+                renderItems();
+            }
+        };
+
+        window.setQty = (id, value) => {
+            const item = items.find(i => i.id === id);
+            if (item) {
+                const newQty = Math.max(0, parseInt(value) || 0);
+                item.quantity = newQty;
                 saveToLocalStorage();
                 renderItems();
             }
