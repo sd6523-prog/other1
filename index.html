@@ -29,14 +29,19 @@
 
     <main class="max-w-2xl mx-auto p-4">
         <!-- 頂部按鈕 -->
+        <div class="flex gap-2 mb-2 overflow-x-auto pb-2 no-scrollbar">
+            <div id="exportTip" class="flex items-center gap-2 px-4 py-3 bg-slate-100 rounded-2xl text-xs font-bold text-slate-500">
+                <i class="fas fa-info-circle"></i> 匯出 Excel 後才能啟用重置或歸零
+            </div>
+        </div>
         <div class="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
-            <button onclick="handleClearAllQty()" class="flex items-center gap-2 bg-white border border-orange-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-orange-500 active:bg-orange-50 transition-colors">
+            <button id="clearAllBtn" onclick="handleClearAllQty()" class="flex items-center gap-2 bg-white border border-orange-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-orange-500 active:bg-orange-50 transition-colors">
                 <i class="fas fa-eraser"></i> 全部歸零
             </button>
-            <button onclick="showModal('resetConfirmModal')" class="flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50 transition-colors">
+            <button id="resetListBtn" onclick="showModal('resetConfirmModal')" class="flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50 transition-colors">
                 <i class="fas fa-sync-alt"></i> 重置清單
             </button>
-            <button onclick="handleExportExcel()" class="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 ml-auto transition-colors">
+            <button id="exportBtn" onclick="handleExportExcel()" class="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 ml-auto transition-colors">
                 <i class="fas fa-file-excel text-emerald-500"></i> 匯出 Excel
             </button>
         </div>
@@ -111,9 +116,10 @@
     <!-- 提交確認彈窗 -->
     <div id="submitConfirmModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
-            <h2 class="text-xl font-black mb-4 text-slate-800">提交與歸零</h2>
+            <h2 id="submitTitle" class="text-xl font-black mb-4 text-slate-800">提交確認</h2>
+            <p id="submitDesc" class="text-sm text-slate-500 mb-4 leading-relaxed"></p>
             <div id="submitPreviewList" class="max-h-40 overflow-y-auto mb-6 space-y-2"></div>
-            <button onclick="handleSubmitInventory()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold mb-2">確認提交並重設數量</button>
+            <button id="submitBtn" onclick="handleSubmitInventory()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold mb-2">確認提交</button>
             <button onclick="closeModal('submitConfirmModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">返回</button>
         </div>
     </div>
@@ -287,19 +293,39 @@
 
         // 控制按鈕顯示邏輯
         function updateButtonVisibility() {
-            const clearBtn = document.querySelector('button[onclick="handleClearAllQty()"]');
-            const resetBtn = document.querySelector('button[onclick="showModal(\'resetConfirmModal\')"]');
-            const exportBtn = document.querySelector('button[onclick="handleExportExcel()"]');
+            const clearBtn = document.getElementById('clearAllBtn');
+            const resetBtn = document.getElementById('resetListBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            const tipEl = document.getElementById('exportTip');
 
             if (isMobileDevice) {
                 if (clearBtn) clearBtn.style.display = 'none';
                 if (resetBtn) resetBtn.style.display = 'none';
                 if (exportBtn) exportBtn.style.display = 'block';
-            } else {
-                if (clearBtn) clearBtn.style.display = excelExported ? 'block' : 'none';
-                if (resetBtn) resetBtn.style.display = excelExported ? 'block' : 'none';
-                if (exportBtn) exportBtn.style.display = 'block';
+                if (tipEl) tipEl.innerText = '手機模式：提交後不會歸零，請使用電腦匯出 Excel 後再重置/歸零。';
+                return;
             }
+
+            if (clearBtn) {
+                clearBtn.style.display = 'block';
+                clearBtn.disabled = !excelExported;
+                clearBtn.className = clearBtn.disabled
+                    ? 'flex items-center gap-2 bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-slate-400 cursor-not-allowed'
+                    : 'flex items-center gap-2 bg-white border border-orange-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-orange-500 active:bg-orange-50 transition-colors';
+            }
+            if (resetBtn) {
+                resetBtn.style.display = 'block';
+                resetBtn.disabled = !excelExported;
+                resetBtn.className = resetBtn.disabled
+                    ? 'flex items-center gap-2 bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-slate-400 cursor-not-allowed'
+                    : 'flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50 transition-colors';
+            }
+            if (exportBtn) {
+                exportBtn.style.display = 'block';
+                exportBtn.disabled = false;
+                exportBtn.className = 'flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 ml-auto transition-colors';
+            }
+            if (tipEl) tipEl.innerText = excelExported ? '已匯出 Excel，可進行重置或歸零' : '尚未匯出 Excel，重置與歸零按鈕目前不可用';
         }
 
         // 事件控制
@@ -364,12 +390,26 @@
         window.handleSubmitConfirm = () => {
             const active = items.filter(i => i.quantity > 0);
             const preview = document.getElementById('submitPreviewList');
+            const titleEl = document.getElementById('submitTitle');
+            const descEl = document.getElementById('submitDesc');
+            const submitBtn = document.getElementById('submitBtn');
+            
             preview.innerHTML = active.map(i => `
                 <div class="flex justify-between text-xs p-2 bg-slate-50 rounded-lg">
                     <span>${i.name}</span>
                     <span class="font-bold text-indigo-600">x ${i.quantity}</span>
                 </div>
             `).join('');
+            
+            if (isMobileDevice) {
+                titleEl.innerText = '指提交清單';
+                descEl.innerText = '手機記錄傾歹後，數量不會歸零。請使用電腦匯出Excel後再重置/歸零。';
+                submitBtn.innerText = '確認提交（數量不歸零）';
+            } else {
+                titleEl.innerText = '確認提交並重設';
+                descEl.innerText = '提交後的帽點基上按鈕會夠重置，找不到会瞄需要使用尊貨匯出後先參考。';
+                submitBtn.innerText = '確認提交並重設數量';
+            }
             showModal('submitConfirmModal');
         };
 
@@ -384,13 +424,22 @@
             });
             localStorage.setItem('inventory-history', JSON.stringify(history));
 
-            // 數量重設
+            if (isMobileDevice) {
+                saveToLocalStorage();
+                renderItems();
+                closeModal('submitConfirmModal');
+                alert('手機提交完成，數量未歸零。請使用電腦匯出Excel後再重置/歸零。');
+                return;
+            }
+
+            // 桌機端提交時可歸零
             items.forEach(i => { if(i.quantity > 0) i.quantity = 0; });
             saveToLocalStorage();
             renderItems();
             closeModal('submitConfirmModal');
             excelExported = false;
             localStorage.setItem('excel-exported', 'false');
+            updateButtonVisibility();
             alert('盤點已提交並重設！');
         };
 
