@@ -122,6 +122,8 @@
         // 開發模式：使用 localStorage 替代 Firebase
         let items = [];
         let selectedCategory = '全部';
+        let excelExported = false;
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         const DEFAULT_LIST = [
             { sku: "93050399", category: "貼紙", name: "標籤貼紙80*63mm/1500張(A款)-理用", order: 1 },
@@ -182,7 +184,7 @@
 
         // 初始化
         function init() {
-            document.getElementById('syncStatus').innerText = '開發模式';
+            document.getElementById('syncStatus').innerText = isMobileDevice ? '手機模式' : '電腦模式';
             loadFromLocalStorage();
             renderItems();
         }
@@ -190,6 +192,8 @@
         // 從 localStorage 載入
         function loadFromLocalStorage() {
             const stored = localStorage.getItem('inventory-items');
+            const exportedFlag = localStorage.getItem('excel-exported');
+            excelExported = exportedFlag === 'true';
             if (stored) {
                 items = JSON.parse(stored);
             } else {
@@ -277,7 +281,26 @@
                 subBtn.className = "flex-1 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all bg-slate-200 text-slate-400";
                 subBtn.style.pointerEvents = "none";
             }
+
+            updateButtonVisibility();
         };
+
+        // 控制按鈕顯示邏輯
+        function updateButtonVisibility() {
+            const clearBtn = document.querySelector('button[onclick="handleClearAllQty()"]');
+            const resetBtn = document.querySelector('button[onclick="showModal(\'resetConfirmModal\')"]');
+            const exportBtn = document.querySelector('button[onclick="handleExportExcel()"]');
+
+            if (isMobileDevice) {
+                if (clearBtn) clearBtn.style.display = 'none';
+                if (resetBtn) resetBtn.style.display = 'none';
+                if (exportBtn) exportBtn.style.display = 'block';
+            } else {
+                if (clearBtn) clearBtn.style.display = excelExported ? 'block' : 'none';
+                if (resetBtn) resetBtn.style.display = excelExported ? 'block' : 'none';
+                if (exportBtn) exportBtn.style.display = 'block';
+            }
+        }
 
         // 事件控制
         window.setCategory = (c) => { selectedCategory = c; renderItems(); };
@@ -318,6 +341,9 @@
             saveToLocalStorage();
             renderItems();
             closeModal('resetConfirmModal');
+            excelExported = false;
+            localStorage.setItem('excel-exported', 'false');
+            updateButtonVisibility();
         };
 
         window.handleAddItem = () => {
@@ -363,6 +389,8 @@
             saveToLocalStorage();
             renderItems();
             closeModal('submitConfirmModal');
+            excelExported = false;
+            localStorage.setItem('excel-exported', 'false');
             alert('盤點已提交並重設！');
         };
 
@@ -372,6 +400,9 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Inventory");
             XLSX.writeFile(wb, `盤點表_${new Date().toLocaleDateString()}.xlsx`);
+            excelExported = true;
+            localStorage.setItem('excel-exported', 'true');
+            updateButtonVisibility();
         };
 
         window.handleClearAllQty = () => {
@@ -379,6 +410,9 @@
                 items.forEach(i => { i.quantity = 0; });
                 saveToLocalStorage();
                 renderItems();
+                excelExported = false;
+                localStorage.setItem('excel-exported', 'false');
+                updateButtonVisibility();
             }
         };
 
