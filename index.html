@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>行動盤點同步助手</title>
+    <title>行動盤點助手 - 雲端同步版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -20,549 +20,317 @@
     <nav class="bg-white border-b sticky top-0 z-40 px-4 py-3 flex items-center justify-between shadow-sm">
         <div class="flex items-center gap-2">
             <div class="bg-indigo-600 p-1.5 rounded-lg text-white">
-                <i class="fas fa-box"></i>
+                <i class="fas fa-cloud-upload-alt"></i>
             </div>
-            <h1 class="font-bold text-slate-800">行動盤點助手</h1>
+            <h1 class="font-bold text-slate-800">即時盤點助手</h1>
         </div>
-        <div id="syncStatus" class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">連線中...</div>
+        <div id="syncIndicator" class="flex items-center gap-2 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+            <span id="syncText">連接中</span>
+            <div id="syncDot" class="w-2 h-2 rounded-full bg-slate-300"></div>
+        </div>
     </nav>
 
     <main class="max-w-2xl mx-auto p-4">
-        <!-- 頂部按鈕 -->
+        <!-- 控制區塊 -->
         <div class="flex gap-2 mb-2 overflow-x-auto pb-2 no-scrollbar">
-            <div id="exportTip" class="flex items-center gap-2 px-4 py-3 bg-slate-100 rounded-2xl text-xs font-bold text-slate-500">
-                <i class="fas fa-info-circle"></i> 匯出 Excel 後才能啟用重置或歸零
+            <div id="tipBox" class="flex items-center gap-2 px-4 py-3 bg-indigo-50 rounded-2xl text-xs font-bold text-indigo-600 border border-indigo-100">
+                <i class="fas fa-info-circle"></i> <span id="tipText">正在驗證雲端權限...</span>
             </div>
-        </div>
-        <div class="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
-            <button id="clearAllBtn" onclick="handleClearAllQty()" class="flex items-center gap-2 bg-white border border-orange-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-orange-500 active:bg-orange-50 transition-colors">
-                <i class="fas fa-eraser"></i> 全部歸零
-            </button>
-            <button id="resetListBtn" onclick="showModal('resetConfirmModal')" class="flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50 transition-colors">
-                <i class="fas fa-sync-alt"></i> 重置清單
-            </button>
-            <button id="exportBtn" onclick="handleExportExcel()" class="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 transition-colors">
-                <i class="fas fa-file-excel text-emerald-500"></i> 匯出 Excel
-            </button>
-            <button id="exportDataBtn" onclick="handleExportData()" class="flex items-center gap-2 bg-white border border-blue-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-blue-500 active:bg-blue-50 transition-colors">
-                <i class="fas fa-download"></i> 匯出數據
-            </button>
-            <button id="importDataBtn" onclick="document.getElementById('importFile').click()" class="flex items-center gap-2 bg-white border border-green-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-green-500 active:bg-green-50 transition-colors">
-                <i class="fas fa-upload"></i> 匯入數據
-            </button>
-            <input type="file" id="importFile" accept=".json" style="display: none" onchange="handleImportData(event)">
         </div>
 
-        <!-- 搜尋與過濾 -->
-        <div class="space-y-4 mb-6">
-            <div class="relative">
-                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input 
-                    type="text" 
-                    id="searchInput"
-                    placeholder="搜尋品名、編碼..." 
-                    class="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm"
-                    oninput="renderItems()"
-                />
-            </div>
-            <div id="categoryTabs" class="flex gap-1.5 overflow-x-auto no-scrollbar py-1"></div>
+        <div class="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
+            <button id="exportBtn" onclick="exportToExcel()" class="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 transition-colors">
+                <i class="fas fa-file-excel text-emerald-500"></i> 匯出 Excel
+            </button>
+            <button id="resetBtn" onclick="confirmReset()" class="flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-400 opacity-50 cursor-not-allowed transition-colors" disabled>
+                <i class="fas fa-redo-alt"></i> 歸零/重置
+            </button>
+            <div class="h-8 w-px bg-slate-200 mx-1"></div>
+            <button onclick="showAddItem()" class="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-slate-600 active:bg-slate-50">
+                <i class="fas fa-plus"></i> 手動新增
+            </button>
         </div>
+
+        <!-- 搜尋 -->
+        <div class="relative mb-6">
+            <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input type="text" id="searchInput" placeholder="搜尋品名、編碼..." class="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm" oninput="renderList()" />
+        </div>
+
+        <!-- 分類標籤 -->
+        <div id="categoryTabs" class="flex gap-1.5 overflow-x-auto no-scrollbar py-1 mb-6"></div>
 
         <!-- 品項列表 -->
         <div id="inventoryList" class="grid gap-3">
-            <div class="flex flex-col items-center justify-center py-20 text-slate-400">
-                <i class="fas fa-circle-notch fa-spin mb-4 text-3xl text-indigo-500"></i>
-                <span class="text-sm font-medium">正在準備雲端資料庫...</span>
-                <p class="text-[10px] mt-2 opacity-50">初次啟動可能需要較長時間</p>
+            <div class="py-20 text-center text-slate-400">
+                <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                <p class="text-sm">初始化中...</p>
             </div>
         </div>
     </main>
 
-    <!-- 底部操作欄 -->
-    <div class="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur-xl border-t p-4 flex gap-3 pb-10 z-40 shadow-2xl">
-        <button onclick="showModal('addItemModal')" class="w-14 h-14 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center shadow-sm active:scale-90 transition-transform shrink-0">
-            <i class="fas fa-plus text-xl"></i>
-        </button>
-        <button 
-            id="submitBtn"
-            onclick="handleSubmitConfirm()" 
-            class="flex-1 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all bg-slate-200 text-slate-400 pointer-events-none"
-        >
-            <i class="fas fa-paper-plane"></i> 提交本次盤點
+    <!-- 底部資訊列 -->
+    <div class="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur-xl border-t p-4 flex items-center justify-between pb-10 z-40 shadow-2xl">
+        <div class="flex flex-col">
+            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">總計盤點項目</span>
+            <span id="totalStats" class="text-xl font-black text-indigo-600">0 / 0</span>
+        </div>
+        <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+            <i class="fas fa-arrow-up"></i>
         </button>
     </div>
 
-    <!-- 彈窗內容：重置確認 -->
-    <div id="resetConfirmModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+    <!-- 彈窗內容維持不變 -->
+    <div id="resetModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
-            <h2 class="text-xl font-black mb-4 text-slate-800">資料重置確認</h2>
-            <p class="text-sm text-slate-500 mb-6">這將會清除雲端上所有的修改，並回復成原始的圖片清單。</p>
+            <h2 class="text-xl font-black mb-4 text-slate-800 text-center">確定要全部歸零嗎？</h2>
+            <p class="text-sm text-slate-500 mb-6 text-center leading-relaxed">這將清除所有手機填寫的數量。請確保電腦端已經匯出 Excel 備份。</p>
             <div class="grid gap-2">
-                <button onclick="initializeDatabase()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold active:scale-95 transition-transform">確認回復預設值</button>
-                <button onclick="closeModal('resetConfirmModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button>
+                <button onclick="executeReset()" class="w-full py-4 bg-red-500 text-white rounded-2xl font-bold active:scale-95 transition-transform">確認歸零</button>
+                <button onclick="closeModal('resetModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button>
             </div>
         </div>
     </div>
 
-    <!-- 彈窗內容：新增品項 -->
-    <div id="addItemModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div id="addModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
-            <h2 class="text-xl font-black mb-6 text-slate-800">新增品項</h2>
+            <h2 class="text-xl font-black mb-6 text-slate-800">手動新增品項</h2>
             <div class="space-y-4">
                 <input id="new_name" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="品項名稱" />
                 <div class="grid grid-cols-2 gap-4">
                     <input id="new_sku" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="編碼" />
                     <input id="new_cat" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="類別" />
                 </div>
-                <button onclick="handleAddItem()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg">確認新增</button>
-                <button onclick="closeModal('addItemModal')" class="w-full py-4 text-slate-400 font-bold">取消</button>
+                <button onclick="executeAdd()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg">確認新增</button>
+                <button onclick="closeModal('addModal')" class="w-full py-4 text-slate-400 font-bold">取消</button>
             </div>
         </div>
     </div>
 
-    <!-- 提交確認彈窗 -->
-    <div id="submitConfirmModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
-            <h2 id="submitTitle" class="text-xl font-black mb-4 text-slate-800">提交確認</h2>
-            <p id="submitDesc" class="text-sm text-slate-500 mb-4 leading-relaxed"></p>
-            <div id="submitPreviewList" class="max-h-40 overflow-y-auto mb-6 space-y-2"></div>
-            <button id="submitBtn" onclick="handleSubmitInventory()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold mb-2">確認提交</button>
-            <button onclick="closeModal('submitConfirmModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">返回</button>
-        </div>
-    </div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, query, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    <script>
-        // 開發模式：使用 localStorage 替代 Firebase
-        let items = [];
-        let selectedCategory = '全部';
+        // Firebase 初始化
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'inventory-manager-v2';
+
+        let inventoryItems = [];
+        let currentCategory = '全部';
         let excelExported = false;
-        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        let currentUser = null;
 
-        const DEFAULT_LIST = [
-            { sku: "93050399", category: "貼紙", name: "標籤貼紙80*63mm/1500張(A款)-理用", order: 1 },
-            { sku: "93050399", category: "貼紙", name: "標籤貼紙35*25mm/3500張理用", order: 2 },
-            { sku: "93050399", category: "貼紙", name: "公板貼(一般)", order: 3 },
-            { sku: "93050399", category: "貼紙", name: "苔藍貼(可擦拭)", order: 4 },
-            { sku: "93050399", category: "碳帶", name: "10M碳帶", order: 5 },
-            { sku: "93050399", category: "碳帶", name: "8M碳帶", order: 6 },
-            { sku: "93050399", category: "碳帶", name: "4M碳帶", order: 7 },
-            { sku: "93120201", category: "碳帶", name: "EPSON LQ-690碳帶", order: 8 },
-            { sku: "93050399", category: "背心袋", name: "1斤背心袋", order: 9 },
-            { sku: "93050399", category: "背心袋", name: "3斤背心袋", order: 10 },
-            { sku: "93050399", category: "背心袋", name: "5斤背心袋", order: 11 },
-            { sku: "93050399", category: "OPP", name: "OPP-1斤透明袋", order: 12 },
-            { sku: "93050399", category: "OPP", name: "OPP-2斤透明袋", order: 13 },
-            { sku: "93050399", category: "OPP", name: "OPP-3斤透明袋", order: 14 },
-            { sku: "93050399", category: "PE", name: "PE-1斤透明袋(蒜泥用)", order: 15 },
-            { sku: "93050399", category: "PE", name: "PE-3斤透明袋(生菜用)", order: 16 },
-            { sku: "93050399", category: "PE", name: "PE-5斤透明袋", order: 17 },
-            { sku: "93050399", category: "PE", name: "PE-7斤透明袋(生菜用)", order: 18 },
-            { sku: "93050399", category: "PE", name: "PE-洞洞袋", order: 19 },
-            { sku: "93050399", category: "袋子", name: "大蔥/山藥專用袋", order: 20 },
-            { sku: "93050399", category: "袋子", name: "銀耳袋", order: 21 },
-            { sku: "93050399", category: "袋子", name: "日燦袋", order: 22 },
-            { sku: "93050399", category: "袋子", name: "杏鮑菇袋(裝大5用)", order: 23 },
-            { sku: "93050399", category: "袋子", name: "香菇袋", order: 24 },
-            { sku: "93050399", category: "袋子", name: "苔藍大袋", order: 25 },
-            { sku: "93129999", category: "膠帶", name: "透明膠帶(寬)", order: 26 },
-            { sku: "93129999", category: "膠帶", name: "紅色膠帶", order: 27 },
-            { sku: "93129999", category: "膠帶", name: "蔬果膠帶", order: 28 },
-            { sku: "93129999", category: "膠帶", name: "束口機膠帶-紅色", order: 29 },
-            { sku: "93129999", category: "膠帶", name: "束口機膠帶-黃色", order: 30 },
-            { sku: "93129999", category: "膠帶", name: "束口機膠帶-藍色", order: 31 },
-            { sku: "93129999", category: "膠帶", name: "束口機膠帶-白色", order: 32 },
-            { sku: "93129999", category: "膠帶", name: "束口機膠帶-綠色", order: 33 },
-            { sku: "93050399", category: "膠帶", name: "透明膠帶(無痕)", order: 34 },
-            { sku: "93129999", category: "文具", name: "油性原子筆", order: 35 },
-            { sku: "93129999", category: "文具", name: "雄獅230R白板筆補充液", order: 36 },
-            { sku: "93129999", category: "文具", name: "雄獅白板筆230", order: 37 },
-            { sku: "94320799", category: "文具", name: "報表紙", order: 38 },
-            { sku: "93129999", category: "文具", name: "美工刀", order: 39 },
-            { sku: "93050399", category: "文具", name: "立可帶", order: 40 },
-            { sku: "93050399", category: "文具", name: "立可帶補充", order: 41 },
-            { sku: "93050399", category: "文具", name: "螢光筆", order: 42 },
-            { sku: "93050399", category: "文具", name: "美工刀刀片", order: 43 },
-            { sku: "93320201", category: "手套", name: "PVC手套XL", order: 44 },
-            { sku: "93320201", category: "手套", name: "PVC手套L", order: 45 },
-            { sku: "93320201", category: "手套", name: "PVC手套M", order: 46 },
-            { sku: "93320201", category: "手套", name: "PVC手套S", order: 47 },
-            { sku: "94320799", category: "其他", name: "拋棄式衛生帽", order: 48 },
-            { sku: "94320799", category: "其他", name: "強諾抗菌洗手乳", order: 49 },
-            { sku: "94320799", category: "其他", name: "圍裙", order: 50 },
-            { sku: "94320799", category: "其他", name: "OK蹦(2.5CM*7.2CM)*2", order: 51 },
-            { sku: "94320799", category: "其他", name: "OK蹦(5CM*7CM)*2", order: 52 },
-            { sku: "93129999", category: "其他", name: "抹布", order: 53 },
-            { sku: "94320799", category: "其他", name: "浴廁清潔劑", order: 54 }
-        ];
+        // 【規則修正】：嚴格等待 Auth 完成後才執行 Firestore 監聽
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth Error:", err);
+                updateSyncStatus('error');
+            }
+        };
 
-        // 初始化
-        function init() {
-            document.getElementById('syncStatus').innerText = isMobileDevice ? '手機模式' : '電腦模式';
-            loadFromLocalStorage();
-            renderItems();
+        // 監聽 Auth 狀態
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                updateSyncStatus('online');
+                document.getElementById('tipText').innerText = "雲端連線成功，準備載入數據。";
+                listenToInventory();
+            } else {
+                updateSyncStatus('offline');
+                document.getElementById('tipText').innerText = "等待雲端驗證...";
+            }
+        });
+
+        // 監聽雲端資料
+        function listenToInventory() {
+            if (!currentUser) return;
+
+            const collectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'items');
+            
+            // 監聽快照，必須包含錯誤回調
+            const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
+                const data = [];
+                snapshot.forEach(doc => {
+                    data.push({ id: doc.id, ...doc.data() });
+                });
+                
+                if (data.length === 0) {
+                    setupDefaultData();
+                } else {
+                    inventoryItems = data;
+                    renderList();
+                    updateStats();
+                }
+            }, (error) => {
+                console.error("Firestore Permission Error:", error);
+                updateSyncStatus('error');
+                document.getElementById('tipText').innerText = "權限不足，請檢查 Firebase 安全規則。";
+            });
+
+            return unsubscribe;
         }
 
-        // 從 localStorage 載入
-        function loadFromLocalStorage() {
-            const stored = localStorage.getItem('inventory-items');
-            const exportedFlag = localStorage.getItem('excel-exported');
-            excelExported = exportedFlag === 'true';
-            if (stored) {
-                items = JSON.parse(stored);
-            } else {
-                items = DEFAULT_LIST.map((item, idx) => ({
-                    id: String(idx),
-                    ...item,
-                    quantity: 0
-                }));
-                saveToLocalStorage();
+        async function setupDefaultData() {
+            if (!currentUser) return;
+            const defaults = [
+                { sku: "93050399", category: "貼紙", name: "標籤貼紙80*63mm/1500張(A款)-理用", order: 1 },
+                { sku: "93050399", category: "貼紙", name: "標籤貼紙35*25mm/3500張理用", order: 2 },
+                { sku: "93050399", category: "碳帶", name: "10M碳帶", order: 5 },
+                { sku: "93320201", category: "手套", name: "PVC手套XL", order: 44 },
+                { sku: "93129999", category: "膠帶", name: "透明膠帶(寬)", order: 26 },
+                { sku: "94320799", category: "其他", name: "拋棄式衛生帽", order: 48 }
+            ];
+
+            try {
+                const batch = writeBatch(db);
+                defaults.forEach((item) => {
+                    const docRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'items'));
+                    batch.set(docRef, { ...item, quantity: 0 });
+                });
+                await batch.commit();
+            } catch (e) {
+                console.error("Failed to setup defaults:", e);
             }
         }
 
-        // 存到 localStorage
-        function saveToLocalStorage() {
-            localStorage.setItem('inventory-items', JSON.stringify(items));
+        function updateSyncStatus(status) {
+            const dot = document.getElementById('syncDot');
+            const text = document.getElementById('syncText');
+            if (status === 'online') {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]';
+                text.innerText = '同步中';
+            } else if (status === 'offline') {
+                dot.className = 'w-2 h-2 rounded-full bg-slate-300';
+                text.innerText = '未連線';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-red-500';
+                text.innerText = '連線出錯';
+            }
         }
 
-        // 渲染畫面
-        window.renderItems = () => {
+        window.renderList = () => {
             const listEl = document.getElementById('inventoryList');
             const tabsEl = document.getElementById('categoryTabs');
             const search = document.getElementById('searchInput').value.toLowerCase();
 
-            // 分類導航
-            const cats = ['全部', ...new Set(items.map(i => i.category))];
-            const otherIdx = cats.indexOf('其他');
-            if(otherIdx > -1) {
-                cats.splice(otherIdx, 1);
+            const cats = ['全部', ...new Set(inventoryItems.map(i => i.category))];
+            if(cats.includes('其他')) {
+                cats.splice(cats.indexOf('其他'), 1);
                 cats.push('其他');
             }
 
             tabsEl.innerHTML = cats.map(cat => `
-                <button onclick="window.setCategory('${cat}')" class="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${selectedCategory === cat ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100'}">
+                <button onclick="setCat('${cat}')" class="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${currentCategory === cat ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100'}">
                     ${cat}
                 </button>
             `).join('');
 
-            // 過濾資料
-            let filtered = items.filter(i => 
-                (i.name + (i.sku || '') + (i.category || '')).toLowerCase().includes(search)
-            );
-            if (selectedCategory !== '全部') {
-                filtered = filtered.filter(i => i.category === selectedCategory);
-            }
+            let filtered = inventoryItems.filter(i => (i.name + i.sku + i.category).toLowerCase().includes(search));
+            if (currentCategory !== '全部') filtered = filtered.filter(i => i.category === currentCategory);
 
-            // 排序
-            filtered.sort((a, b) => {
-                const isAOther = a.category === '其他';
-                const isBOther = b.category === '其他';
-                if (isAOther && !isBOther) return 1;
-                if (!isAOther && isBOther) return -1;
-                return (a.order || 0) - (b.order || 0);
-            });
+            filtered.sort((a, b) => (a.order || 999) - (b.order || 999));
 
-            // 渲染列表
             if (filtered.length === 0) {
-                listEl.innerHTML = `<div class="py-20 text-center text-slate-400 text-sm italic">無項目</div>`;
-            } else {
-                listEl.innerHTML = filtered.map(item => `
-                    <div class="bg-white rounded-2xl p-4 border transition-all flex items-center justify-between shadow-sm ${item.quantity > 0 ? 'border-indigo-400 bg-indigo-50/20' : 'border-slate-100'}">
-                        <div class="flex-1 min-w-0 pr-4">
-                            <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-1">${item.sku || '---'}</div>
-                            <div class="font-bold text-slate-800 text-sm truncate mb-1">${item.name}</div>
-                            <div class="text-[10px] text-slate-400">${item.category}</div>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <div class="flex items-center bg-slate-50 rounded-xl border p-0.5">
-                                <button onclick="window.updateQty('${item.id}', -1)" class="w-10 h-10 flex items-center justify-center font-bold text-slate-400">-</button>
-                                <input type="number" value="${item.quantity || 0}" class="w-12 text-center font-black text-sm border-0 bg-white outline-none focus:ring-1 focus:ring-indigo-400" onchange="window.setQty('${item.id}', this.value)" />
-                                <button onclick="window.updateQty('${item.id}', 1)" class="w-10 h-10 flex items-center justify-center font-bold text-slate-400">+</button>
-                            </div>
-                            <button onclick="window.deleteItem('${item.id}')" class="p-2 text-slate-200 hover:text-red-400"><i class="fas fa-trash-alt"></i></button>
-                        </div>
-                    </div>
-                `).join('');
-            }
-
-            // 按鈕狀態
-            const hasQty = items.some(i => i.quantity > 0);
-            const subBtn = document.getElementById('submitBtn');
-            if (hasQty) {
-                subBtn.className = "flex-1 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all bg-indigo-600 text-white";
-                subBtn.style.pointerEvents = "auto";
-            } else {
-                subBtn.className = "flex-1 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all bg-slate-200 text-slate-400";
-                subBtn.style.pointerEvents = "none";
-            }
-
-            updateButtonVisibility();
-        };
-
-        // 控制按鈕顯示邏輯
-        function updateButtonVisibility() {
-            const clearBtn = document.getElementById('clearAllBtn');
-            const resetBtn = document.getElementById('resetListBtn');
-            const exportBtn = document.getElementById('exportBtn');
-            const exportDataBtn = document.getElementById('exportDataBtn');
-            const importDataBtn = document.getElementById('importDataBtn');
-            const tipEl = document.getElementById('exportTip');
-
-            if (isMobileDevice) {
-                if (clearBtn) clearBtn.style.display = 'none';
-                if (resetBtn) resetBtn.style.display = 'none';
-                if (exportBtn) exportBtn.style.display = 'block';
-                if (exportDataBtn) exportDataBtn.style.display = 'block';
-                if (importDataBtn) importDataBtn.style.display = 'none'; // 手機端不顯示匯入
-                if (tipEl) tipEl.innerText = '手機模式：提交後不會歸零，請匯出數據到電腦後再重置/歸零。';
+                listEl.innerHTML = `<div class="py-20 text-center text-slate-400 text-sm italic">找不出品項</div>`;
                 return;
             }
 
-            if (clearBtn) {
-                clearBtn.style.display = 'block';
-                clearBtn.disabled = !excelExported;
-                clearBtn.className = clearBtn.disabled
-                    ? 'flex items-center gap-2 bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-slate-400 cursor-not-allowed'
-                    : 'flex items-center gap-2 bg-white border border-orange-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-orange-500 active:bg-orange-50 transition-colors';
+            listEl.innerHTML = filtered.map(item => `
+                <div class="bg-white rounded-2xl p-4 border transition-all flex items-center justify-between shadow-sm ${item.quantity > 0 ? 'border-indigo-300 bg-indigo-50/10' : 'border-slate-100'}">
+                    <div class="flex-1 min-w-0 pr-4">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">${item.sku || '---'}</div>
+                        <div class="font-bold text-slate-800 text-sm truncate leading-tight">${item.name}</div>
+                        <div class="text-[9px] font-bold text-indigo-400 mt-1">${item.category}</div>
+                    </div>
+                    <div class="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-0.5">
+                        <button onclick="updateQty('${item.id}', -1)" class="w-9 h-9 flex items-center justify-center font-bold text-slate-400">-</button>
+                        <input type="number" value="${item.quantity || 0}" class="w-10 text-center font-black text-sm border-0 bg-transparent outline-none" onchange="setQty('${item.id}', this.value)" />
+                        <button onclick="updateQty('${item.id}', 1)" class="w-9 h-9 flex items-center justify-center font-bold text-slate-400">+</button>
+                    </div>
+                </div>
+            `).join('');
+        };
+
+        window.updateQty = async (id, delta) => {
+            if (!currentUser) return;
+            const item = inventoryItems.find(i => i.id === id);
+            if (item) {
+                const newQty = Math.max(0, (item.quantity || 0) + delta);
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'items', id);
+                await updateDoc(docRef, { quantity: newQty });
             }
-            if (resetBtn) {
-                resetBtn.style.display = 'block';
-                resetBtn.disabled = !excelExported;
-                resetBtn.className = resetBtn.disabled
-                    ? 'flex items-center gap-2 bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-slate-400 cursor-not-allowed'
-                    : 'flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50 transition-colors';
-            }
-            if (exportBtn) {
-                exportBtn.style.display = 'block';
-                exportBtn.disabled = false;
-                exportBtn.className = 'flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 transition-colors';
-            }
-            if (exportDataBtn) {
-                exportDataBtn.style.display = 'block';
-                exportDataBtn.disabled = false;
-                exportDataBtn.className = 'flex items-center gap-2 bg-white border border-blue-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-blue-500 active:bg-blue-50 transition-colors';
-            }
-            if (importDataBtn) {
-                importDataBtn.style.display = 'block';
-                importDataBtn.disabled = false;
-                importDataBtn.className = 'flex items-center gap-2 bg-white border border-green-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-green-500 active:bg-green-50 transition-colors';
-            }
-            if (tipEl) tipEl.innerText = excelExported ? '已匯出 Excel，可進行重置或歸零' : '尚未匯出 Excel，重置與歸零按鈕目前不可用';
+        };
+
+        window.setQty = async (id, val) => {
+            if (!currentUser) return;
+            const newQty = Math.max(0, parseInt(val) || 0);
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'items', id);
+            await updateDoc(docRef, { quantity: newQty });
+        };
+
+        window.setCat = (c) => { currentCategory = c; renderList(); };
+
+        function updateStats() {
+            const filled = inventoryItems.filter(i => i.quantity > 0).length;
+            document.getElementById('totalStats').innerText = `${filled} / ${inventoryItems.length}`;
         }
 
-        // 事件控制
-        window.setCategory = (c) => { selectedCategory = c; renderItems(); };
-        
-        window.updateQty = (id, delta) => {
-            const item = items.find(i => i.id === id);
-            if (item) {
-                item.quantity = Math.max(0, (item.quantity || 0) + delta);
-                saveToLocalStorage();
-                renderItems();
-            }
+        window.exportToExcel = () => {
+            const data = inventoryItems.filter(i => i.quantity > 0).map(i => ({ '編碼': i.sku, '類別': i.category, '品名': i.name, '盤點數量': i.quantity }));
+            if (data.length === 0) return alert('目前沒有任何盤點數量。');
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "盤點數據");
+            XLSX.writeFile(wb, `盤點表_${new Date().toLocaleDateString()}.xlsx`);
+            excelExported = true;
+            document.getElementById('resetBtn').disabled = false;
+            document.getElementById('resetBtn').classList.replace('opacity-50', 'opacity-100');
+            document.getElementById('resetBtn').classList.replace('cursor-not-allowed', 'cursor-pointer');
         };
 
-        window.setQty = (id, value) => {
-            const item = items.find(i => i.id === id);
-            if (item) {
-                const newQty = Math.max(0, parseInt(value) || 0);
-                item.quantity = newQty;
-                saveToLocalStorage();
-                renderItems();
-            }
+        window.confirmReset = () => {
+            if (!excelExported) return alert('請先匯出 Excel 備份再歸零。');
+            document.getElementById('resetModal').classList.remove('hidden');
         };
 
-        window.deleteItem = (id) => {
-            if(confirm('移除此品項？')) {
-                items = items.filter(i => i.id !== id);
-                saveToLocalStorage();
-                renderItems();
-            }
-        };
-
-        window.initializeDatabase = () => {
-            items = DEFAULT_LIST.map((item, idx) => ({
-                id: String(idx),
-                ...item,
-                quantity: 0
-            }));
-            saveToLocalStorage();
-            renderItems();
-            closeModal('resetConfirmModal');
+        window.executeReset = async () => {
+            if (!currentUser) return;
+            const batch = writeBatch(db);
+            inventoryItems.forEach(item => {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'items', item.id);
+                batch.update(docRef, { quantity: 0 });
+            });
+            await batch.commit();
+            closeModal('resetModal');
             excelExported = false;
-            localStorage.setItem('excel-exported', 'false');
-            updateButtonVisibility();
         };
 
-        window.handleAddItem = () => {
+        window.showAddItem = () => document.getElementById('addModal').classList.remove('hidden');
+        window.executeAdd = async () => {
+            if (!currentUser) return;
             const name = document.getElementById('new_name').value;
             const sku = document.getElementById('new_sku').value;
             const cat = document.getElementById('new_cat').value;
-            if(!name) return;
-            items.push({
-                id: String(Date.now()),
-                name, sku, category: cat || '其他', quantity: 0, order: 999
-            });
-            saveToLocalStorage();
-            renderItems();
-            closeModal('addItemModal');
-            document.getElementById('new_name').value = '';
+            if (!name) return;
+            const docRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'items'));
+            await setDoc(docRef, { sku: sku || '', name: name, category: cat || '其他', quantity: 0, order: 999 });
+            closeModal('addModal');
         };
 
-        window.handleSubmitConfirm = () => {
-            const active = items.filter(i => i.quantity > 0);
-            const preview = document.getElementById('submitPreviewList');
-            const titleEl = document.getElementById('submitTitle');
-            const descEl = document.getElementById('submitDesc');
-            const submitBtn = document.getElementById('submitBtn');
-            
-            preview.innerHTML = active.map(i => `
-                <div class="flex justify-between text-xs p-2 bg-slate-50 rounded-lg">
-                    <span>${i.name}</span>
-                    <span class="font-bold text-indigo-600">x ${i.quantity}</span>
-                </div>
-            `).join('');
-            
-            if (isMobileDevice) {
-                titleEl.innerText = '指提交清單';
-                descEl.innerText = '手機記錄傾歹後，數量不會歸零。請使用電腦匯出Excel後再重置/歸零。';
-                submitBtn.innerText = '確認提交（數量不歸零）';
-            } else {
-                titleEl.innerText = '確認提交並重設';
-                descEl.innerText = '提交後的帽點基上按鈕會夠重置，找不到会瞄需要使用尊貨匯出後先參考。';
-                submitBtn.innerText = '確認提交並重設數量';
-            }
-            showModal('submitConfirmModal');
-        };
-
-        window.handleSubmitInventory = () => {
-            const active = items.filter(i => i.quantity > 0);
-            
-            // 記錄到歷史
-            const history = JSON.parse(localStorage.getItem('inventory-history') || '[]');
-            history.push({
-                submitAt: new Date().toISOString(),
-                details: active.map(i => ({ name: i.name, qty: i.quantity }))
-            });
-            localStorage.setItem('inventory-history', JSON.stringify(history));
-
-            if (isMobileDevice) {
-                saveToLocalStorage();
-                renderItems();
-                closeModal('submitConfirmModal');
-                alert('手機提交完成，數量未歸零。請使用電腦匯出Excel後再重置/歸零。');
-                return;
-            }
-
-            // 桌機端提交時可歸零
-            items.forEach(i => { if(i.quantity > 0) i.quantity = 0; });
-            saveToLocalStorage();
-            renderItems();
-            closeModal('submitConfirmModal');
-            excelExported = false;
-            localStorage.setItem('excel-exported', 'false');
-            updateButtonVisibility();
-            alert('盤點已提交並重設！');
-        };
-
-        window.handleExportExcel = () => {
-            const data = items.map(i => ({ '編碼': i.sku, '類別': i.category, '品名': i.name, '盤點數量': i.quantity }));
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Inventory");
-            XLSX.writeFile(wb, `盤點表_${new Date().toLocaleDateString()}.xlsx`);
-            excelExported = true;
-            localStorage.setItem('excel-exported', 'true');
-            updateButtonVisibility();
-        };
-
-        // 匯出數據 (JSON格式，用於跨設備同步)
-        window.handleExportData = () => {
-            const exportData = {
-                items: items,
-                exportedAt: new Date().toISOString(),
-                device: isMobileDevice ? 'mobile' : 'desktop',
-                version: '1.0'
-            };
-            const dataStr = JSON.stringify(exportData, null, 2);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `盤點數據_${new Date().toLocaleDateString()}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            alert('數據已匯出！請將此文件傳送到電腦端進行匯入。');
-        };
-
-        // 匯入數據
-        window.handleImportData = (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const importData = JSON.parse(e.target.result);
-
-                    // 驗證數據格式
-                    if (!importData.items || !Array.isArray(importData.items)) {
-                        throw new Error('數據格式錯誤');
-                    }
-
-                    // 確認匯入
-                    const hasQuantities = importData.items.some(item => item.quantity > 0);
-                    const confirmMsg = hasQuantities
-                        ? `發現 ${importData.items.filter(i => i.quantity > 0).length} 項有盤點數量，確定要匯入嗎？`
-                        : '確定要匯入數據嗎？';
-
-                    if (confirm(confirmMsg)) {
-                        // 合併數據：保留現有項目的數量，但更新其他信息
-                        const mergedItems = items.map(existingItem => {
-                            const importedItem = importData.items.find(i => i.id === existingItem.id);
-                            if (importedItem) {
-                                return {
-                                    ...existingItem,
-                                    quantity: importedItem.quantity || 0  // 匯入數量
-                                };
-                            }
-                            return existingItem;
-                        });
-
-                        items = mergedItems;
-                        saveToLocalStorage();
-                        renderItems();
-
-                        const importedCount = importData.items.filter(i => i.quantity > 0).length;
-                        alert(`數據匯入完成！共匯入 ${importedCount} 項盤點數量。`);
-                    }
-                } catch (error) {
-                    alert('數據格式錯誤或文件損壞：' + error.message);
-                }
-            };
-            reader.readAsText(file);
-
-            // 清空文件輸入
-            event.target.value = '';
-        };
-
-        window.handleClearAllQty = () => {
-            if(confirm('確定要清除所有數量嗎？')) {
-                items.forEach(i => { i.quantity = 0; });
-                saveToLocalStorage();
-                renderItems();
-                excelExported = false;
-                localStorage.setItem('excel-exported', 'false');
-                updateButtonVisibility();
-            }
-        };
-
-        window.showModal = (id) => document.getElementById(id).classList.remove('hidden');
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 
-        // 啟動
-        init();
+        // 啟動流程
+        initAuth();
     </script>
 </body>
 </html>
