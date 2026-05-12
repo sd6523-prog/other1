@@ -41,9 +41,16 @@
             <button id="resetListBtn" onclick="showModal('resetConfirmModal')" class="flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50 transition-colors">
                 <i class="fas fa-sync-alt"></i> 重置清單
             </button>
-            <button id="exportBtn" onclick="handleExportExcel()" class="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 ml-auto transition-colors">
+            <button id="exportBtn" onclick="handleExportExcel()" class="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 transition-colors">
                 <i class="fas fa-file-excel text-emerald-500"></i> 匯出 Excel
             </button>
+            <button id="exportDataBtn" onclick="handleExportData()" class="flex items-center gap-2 bg-white border border-blue-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-blue-500 active:bg-blue-50 transition-colors">
+                <i class="fas fa-download"></i> 匯出數據
+            </button>
+            <button id="importDataBtn" onclick="document.getElementById('importFile').click()" class="flex items-center gap-2 bg-white border border-green-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-green-500 active:bg-green-50 transition-colors">
+                <i class="fas fa-upload"></i> 匯入數據
+            </button>
+            <input type="file" id="importFile" accept=".json" style="display: none" onchange="handleImportData(event)">
         </div>
 
         <!-- 搜尋與過濾 -->
@@ -296,13 +303,17 @@
             const clearBtn = document.getElementById('clearAllBtn');
             const resetBtn = document.getElementById('resetListBtn');
             const exportBtn = document.getElementById('exportBtn');
+            const exportDataBtn = document.getElementById('exportDataBtn');
+            const importDataBtn = document.getElementById('importDataBtn');
             const tipEl = document.getElementById('exportTip');
 
             if (isMobileDevice) {
                 if (clearBtn) clearBtn.style.display = 'none';
                 if (resetBtn) resetBtn.style.display = 'none';
                 if (exportBtn) exportBtn.style.display = 'block';
-                if (tipEl) tipEl.innerText = '手機模式：提交後不會歸零，請使用電腦匯出 Excel 後再重置/歸零。';
+                if (exportDataBtn) exportDataBtn.style.display = 'block';
+                if (importDataBtn) importDataBtn.style.display = 'none'; // 手機端不顯示匯入
+                if (tipEl) tipEl.innerText = '手機模式：提交後不會歸零，請匯出數據到電腦後再重置/歸零。';
                 return;
             }
 
@@ -323,7 +334,17 @@
             if (exportBtn) {
                 exportBtn.style.display = 'block';
                 exportBtn.disabled = false;
-                exportBtn.className = 'flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 ml-auto transition-colors';
+                exportBtn.className = 'flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 transition-colors';
+            }
+            if (exportDataBtn) {
+                exportDataBtn.style.display = 'block';
+                exportDataBtn.disabled = false;
+                exportDataBtn.className = 'flex items-center gap-2 bg-white border border-blue-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-blue-500 active:bg-blue-50 transition-colors';
+            }
+            if (importDataBtn) {
+                importDataBtn.style.display = 'block';
+                importDataBtn.disabled = false;
+                importDataBtn.className = 'flex items-center gap-2 bg-white border border-green-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-green-500 active:bg-green-50 transition-colors';
             }
             if (tipEl) tipEl.innerText = excelExported ? '已匯出 Excel，可進行重置或歸零' : '尚未匯出 Excel，重置與歸零按鈕目前不可用';
         }
@@ -452,6 +473,78 @@
             excelExported = true;
             localStorage.setItem('excel-exported', 'true');
             updateButtonVisibility();
+        };
+
+        // 匯出數據 (JSON格式，用於跨設備同步)
+        window.handleExportData = () => {
+            const exportData = {
+                items: items,
+                exportedAt: new Date().toISOString(),
+                device: isMobileDevice ? 'mobile' : 'desktop',
+                version: '1.0'
+            };
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `盤點數據_${new Date().toLocaleDateString()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert('數據已匯出！請將此文件傳送到電腦端進行匯入。');
+        };
+
+        // 匯入數據
+        window.handleImportData = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importData = JSON.parse(e.target.result);
+
+                    // 驗證數據格式
+                    if (!importData.items || !Array.isArray(importData.items)) {
+                        throw new Error('數據格式錯誤');
+                    }
+
+                    // 確認匯入
+                    const hasQuantities = importData.items.some(item => item.quantity > 0);
+                    const confirmMsg = hasQuantities
+                        ? `發現 ${importData.items.filter(i => i.quantity > 0).length} 項有盤點數量，確定要匯入嗎？`
+                        : '確定要匯入數據嗎？';
+
+                    if (confirm(confirmMsg)) {
+                        // 合併數據：保留現有項目的數量，但更新其他信息
+                        const mergedItems = items.map(existingItem => {
+                            const importedItem = importData.items.find(i => i.id === existingItem.id);
+                            if (importedItem) {
+                                return {
+                                    ...existingItem,
+                                    quantity: importedItem.quantity || 0  // 匯入數量
+                                };
+                            }
+                            return existingItem;
+                        });
+
+                        items = mergedItems;
+                        saveToLocalStorage();
+                        renderItems();
+
+                        const importedCount = importData.items.filter(i => i.quantity > 0).length;
+                        alert(`數據匯入完成！共匯入 ${importedCount} 項盤點數量。`);
+                    }
+                } catch (error) {
+                    alert('數據格式錯誤或文件損壞：' + error.message);
+                }
+            };
+            reader.readAsText(file);
+
+            // 清空文件輸入
+            event.target.value = '';
         };
 
         window.handleClearAllQty = () => {
