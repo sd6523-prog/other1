@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>行動盤點助手 - 雲端同步版</title>
+    <title>行動盤點助手 - 代碼同步版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
@@ -20,202 +21,112 @@
     <nav class="bg-white border-b sticky top-0 z-40 px-4 py-3 flex items-center justify-between shadow-sm">
         <div class="flex items-center gap-2">
             <div class="bg-indigo-600 p-1.5 rounded-lg text-white">
-                <i class="fas fa-cloud-upload-alt"></i>
+                <i class="fas fa-boxes"></i>
             </div>
-            <h1 class="font-bold text-slate-800">即時盤點助手</h1>
+            <h1 class="font-bold text-slate-800 tracking-tight">行動盤點助手</h1>
         </div>
-        <div id="syncIndicator" class="flex items-center gap-2 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-            <span id="syncText">連接中</span>
-            <div id="syncDot" class="w-2 h-2 rounded-full bg-slate-300"></div>
-        </div>
+        <button onclick="showImportModal()" class="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 active:scale-95 transition-transform">
+            <i class="fas fa-keyboard"></i> 電腦端輸入同步
+        </button>
     </nav>
 
     <main class="max-w-2xl mx-auto p-4">
-        <!-- 控制區塊 -->
-        <div class="flex gap-2 mb-2 overflow-x-auto pb-2 no-scrollbar">
-            <div id="tipBox" class="flex items-center gap-2 px-4 py-3 bg-indigo-50 rounded-2xl text-xs font-bold text-indigo-600 border border-indigo-100">
-                <i class="fas fa-info-circle"></i> <span id="tipText">正在驗證雲端權限...</span>
-            </div>
-        </div>
-
+        <!-- 頂部操作按鈕 -->
         <div class="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
             <button id="exportBtn" onclick="exportToExcel()" class="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-slate-50 transition-colors">
                 <i class="fas fa-file-excel text-emerald-500"></i> 匯出 Excel
             </button>
-            <button id="resetBtn" onclick="confirmReset()" class="flex items-center gap-2 bg-white border border-red-100 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-400 opacity-50 cursor-not-allowed transition-colors" disabled>
-                <i class="fas fa-redo-alt"></i> 歸零/重置
+            <button onclick="generateSyncQR()" class="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap active:bg-indigo-700 transition-colors">
+                <i class="fas fa-paper-plane"></i> 手機傳送數據
             </button>
             <div class="h-8 w-px bg-slate-200 mx-1"></div>
-            <button onclick="showAddItem()" class="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-slate-600 active:bg-slate-50">
-                <i class="fas fa-plus"></i> 手動新增
+            <button onclick="confirmReset()" class="flex items-center gap-2 bg-white border border-red-50 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm whitespace-nowrap text-red-500 active:bg-red-50">
+                <i class="fas fa-trash-alt"></i> 清除
             </button>
         </div>
 
         <!-- 搜尋 -->
         <div class="relative mb-6">
             <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-            <input type="text" id="searchInput" placeholder="搜尋品名、編碼..." class="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm" oninput="renderList()" />
+            <input type="text" id="searchInput" placeholder="快速搜尋品名、編碼..." class="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm" oninput="renderList()" />
         </div>
 
-        <!-- 分類標籤 -->
-        <div id="categoryTabs" class="flex gap-1.5 overflow-x-auto no-scrollbar py-1 mb-6"></div>
+        <!-- 分類 -->
+        <div id="categoryTabs" class="flex gap-2 overflow-x-auto no-scrollbar mb-6"></div>
 
-        <!-- 品項列表 -->
-        <div id="inventoryList" class="grid gap-3">
-            <div class="py-20 text-center text-slate-400">
-                <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
-                <p class="text-sm">初始化中...</p>
-            </div>
-        </div>
+        <!-- 清單 -->
+        <div id="inventoryList" class="grid gap-3"></div>
     </main>
 
-    <!-- 底部資訊列 -->
-    <div class="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur-xl border-t p-4 flex items-center justify-between pb-10 z-40 shadow-2xl">
+    <!-- 底部固定統計列 -->
+    <div class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t p-4 pb-8 flex items-center justify-between z-40 shadow-2xl">
         <div class="flex flex-col">
-            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">總計盤點項目</span>
-            <span id="totalStats" class="text-xl font-black text-indigo-600">0 / 0</span>
-        </div>
-        <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center active:scale-90 transition-transform">
-            <i class="fas fa-arrow-up"></i>
-        </button>
-    </div>
-
-    <!-- 彈窗內容維持不變 -->
-    <div id="resetModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
-            <h2 class="text-xl font-black mb-4 text-slate-800 text-center">確定要全部歸零嗎？</h2>
-            <p class="text-sm text-slate-500 mb-6 text-center leading-relaxed">這將清除所有手機填寫的數量。請確保電腦端已經匯出 Excel 備份。</p>
-            <div class="grid gap-2">
-                <button onclick="executeReset()" class="w-full py-4 bg-red-500 text-white rounded-2xl font-bold active:scale-95 transition-transform">確認歸零</button>
-                <button onclick="closeModal('resetModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button>
+            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">當前盤點進度</span>
+            <div class="flex items-baseline gap-1">
+                <span id="totalStats" class="text-2xl font-black text-indigo-600">0 / 0</span>
+                <span class="text-[10px] text-slate-400 font-bold">項目已填寫</span>
             </div>
         </div>
-    </div>
-
-    <div id="addModal" class="hidden fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
-            <h2 class="text-xl font-black mb-6 text-slate-800">手動新增品項</h2>
-            <div class="space-y-4">
-                <input id="new_name" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="品項名稱" />
-                <div class="grid grid-cols-2 gap-4">
-                    <input id="new_sku" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="編碼" />
-                    <input id="new_cat" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="類別" />
-                </div>
-                <button onclick="executeAdd()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg">確認新增</button>
-                <button onclick="closeModal('addModal')" class="w-full py-4 text-slate-400 font-bold">取消</button>
-            </div>
+        <div class="text-right">
+            <p class="text-[9px] text-slate-400 font-medium">數據儲存於此裝置</p>
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, query, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase 初始化
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'inventory-manager-v2';
-
-        let inventoryItems = [];
-        let currentCategory = '全部';
-        let excelExported = false;
-        let currentUser = null;
-
-        // 【規則修正】：嚴格等待 Auth 完成後才執行 Firestore 監聽
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (err) {
-                console.error("Auth Error:", err);
-                updateSyncStatus('error');
-            }
-        };
-
-        // 監聽 Auth 狀態
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user) {
-                updateSyncStatus('online');
-                document.getElementById('tipText').innerText = "雲端連線成功，準備載入數據。";
-                listenToInventory();
-            } else {
-                updateSyncStatus('offline');
-                document.getElementById('tipText').innerText = "等待雲端驗證...";
-            }
-        });
-
-        // 監聽雲端資料
-        function listenToInventory() {
-            if (!currentUser) return;
-
-            const collectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'items');
+    <!-- 彈窗：手機顯示 QR 與 代碼 -->
+    <div id="qrModal" class="hidden fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl flex flex-col items-center">
+            <h2 class="text-xl font-black mb-2 text-slate-800">數據同步</h2>
+            <p class="text-xs text-slate-500 mb-6 text-center">電腦無鏡頭？請複製下方代碼並傳給電腦</p>
             
-            // 監聽快照，必須包含錯誤回調
-            const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
-                const data = [];
-                snapshot.forEach(doc => {
-                    data.push({ id: doc.id, ...doc.data() });
-                });
-                
-                if (data.length === 0) {
-                    setupDefaultData();
-                } else {
-                    inventoryItems = data;
-                    renderList();
-                    updateStats();
-                }
-            }, (error) => {
-                console.error("Firestore Permission Error:", error);
-                updateSyncStatus('error');
-                document.getElementById('tipText').innerText = "權限不足，請檢查 Firebase 安全規則。";
-            });
+            <div id="qrcode" class="p-4 bg-white border border-slate-100 rounded-2xl mb-6"></div>
+            
+            <div class="w-full bg-slate-50 p-4 rounded-2xl mb-6 relative">
+                <label class="text-[10px] font-bold text-slate-400 uppercase">同步字串 (數據代碼)</label>
+                <textarea id="syncString" readonly class="w-full bg-transparent text-[10px] text-slate-600 break-all resize-none mt-1 h-12 outline-none"></textarea>
+                <button onclick="copySyncString()" class="mt-2 w-full py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors">
+                    <i class="fas fa-copy mr-1"></i> 點我複製代碼
+                </button>
+            </div>
 
-            return unsubscribe;
+            <button onclick="closeModal('qrModal')" class="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">關閉視窗</button>
+        </div>
+    </div>
+
+    <!-- 彈窗：電腦端輸入代碼 -->
+    <div id="importModal" class="hidden fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl">
+            <h2 class="text-xl font-black mb-2 text-slate-800">輸入同步代碼</h2>
+            <p class="text-xs text-slate-500 mb-6">請貼上手機傳來的同步字串</p>
+            
+            <textarea id="inputSyncString" placeholder="在此貼上代碼..." class="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[10px] text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/20 mb-4"></textarea>
+            
+            <div class="flex gap-2">
+                <button onclick="closeModal('importModal')" class="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">取消</button>
+                <button onclick="processSyncString()" class="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold">確認同步</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const INITIAL_DATA = [
+            { id: '1', sku: "93050399", category: "貼紙", name: "標籤貼紙80*63mm/1500張(A款)-理用", quantity: 0 },
+            { id: '2', sku: "93050399", category: "貼紙", name: "標籤貼紙35*25mm/3500張理用", quantity: 0 },
+            { id: '3', sku: "93050399", category: "碳帶", name: "10M碳帶", quantity: 0 },
+            { id: '4', sku: "93320201", category: "手套", name: "PVC手套XL", quantity: 0 },
+            { id: '5', sku: "93129999", category: "膠帶", name: "透明膠帶(寬)", quantity: 0 }
+        ];
+
+        let inventoryItems = JSON.parse(localStorage.getItem('my_inventory_v3')) || INITIAL_DATA;
+        let currentCategory = '全部';
+
+        function saveData() {
+            localStorage.setItem('my_inventory_v3', JSON.stringify(inventoryItems));
+            updateStats();
         }
 
-        async function setupDefaultData() {
-            if (!currentUser) return;
-            const defaults = [
-                { sku: "93050399", category: "貼紙", name: "標籤貼紙80*63mm/1500張(A款)-理用", order: 1 },
-                { sku: "93050399", category: "貼紙", name: "標籤貼紙35*25mm/3500張理用", order: 2 },
-                { sku: "93050399", category: "碳帶", name: "10M碳帶", order: 5 },
-                { sku: "93320201", category: "手套", name: "PVC手套XL", order: 44 },
-                { sku: "93129999", category: "膠帶", name: "透明膠帶(寬)", order: 26 },
-                { sku: "94320799", category: "其他", name: "拋棄式衛生帽", order: 48 }
-            ];
-
-            try {
-                const batch = writeBatch(db);
-                defaults.forEach((item) => {
-                    const docRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'items'));
-                    batch.set(docRef, { ...item, quantity: 0 });
-                });
-                await batch.commit();
-            } catch (e) {
-                console.error("Failed to setup defaults:", e);
-            }
-        }
-
-        function updateSyncStatus(status) {
-            const dot = document.getElementById('syncDot');
-            const text = document.getElementById('syncText');
-            if (status === 'online') {
-                dot.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]';
-                text.innerText = '同步中';
-            } else if (status === 'offline') {
-                dot.className = 'w-2 h-2 rounded-full bg-slate-300';
-                text.innerText = '未連線';
-            } else {
-                dot.className = 'w-2 h-2 rounded-full bg-red-500';
-                text.innerText = '連線出錯';
-            }
+        function updateStats() {
+            const filled = inventoryItems.filter(i => i.quantity > 0).length;
+            document.getElementById('totalStats').innerText = `${filled} / ${inventoryItems.length}`;
         }
 
         window.renderList = () => {
@@ -224,113 +135,98 @@
             const search = document.getElementById('searchInput').value.toLowerCase();
 
             const cats = ['全部', ...new Set(inventoryItems.map(i => i.category))];
-            if(cats.includes('其他')) {
-                cats.splice(cats.indexOf('其他'), 1);
-                cats.push('其他');
-            }
-
             tabsEl.innerHTML = cats.map(cat => `
-                <button onclick="setCat('${cat}')" class="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${currentCategory === cat ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100'}">
+                <button onclick="setCat('${cat}')" class="px-5 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${currentCategory === cat ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-500 border border-slate-100'}">
                     ${cat}
                 </button>
             `).join('');
 
-            let filtered = inventoryItems.filter(i => (i.name + i.sku + i.category).toLowerCase().includes(search));
+            let filtered = inventoryItems.filter(i => (i.name + i.sku).toLowerCase().includes(search));
             if (currentCategory !== '全部') filtered = filtered.filter(i => i.category === currentCategory);
 
-            filtered.sort((a, b) => (a.order || 999) - (b.order || 999));
-
-            if (filtered.length === 0) {
-                listEl.innerHTML = `<div class="py-20 text-center text-slate-400 text-sm italic">找不出品項</div>`;
-                return;
-            }
-
             listEl.innerHTML = filtered.map(item => `
-                <div class="bg-white rounded-2xl p-4 border transition-all flex items-center justify-between shadow-sm ${item.quantity > 0 ? 'border-indigo-300 bg-indigo-50/10' : 'border-slate-100'}">
+                <div class="bg-white rounded-[1.5rem] p-5 border flex items-center justify-between shadow-sm ${item.quantity > 0 ? 'border-indigo-400 bg-indigo-50/20' : 'border-slate-100'}">
                     <div class="flex-1 min-w-0 pr-4">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">${item.sku || '---'}</div>
-                        <div class="font-bold text-slate-800 text-sm truncate leading-tight">${item.name}</div>
-                        <div class="text-[9px] font-bold text-indigo-400 mt-1">${item.category}</div>
+                        <div class="text-[10px] font-bold text-slate-400 mb-1 tracking-wider">${item.sku}</div>
+                        <div class="font-bold text-slate-800 text-sm leading-snug">${item.name}</div>
                     </div>
-                    <div class="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-0.5">
-                        <button onclick="updateQty('${item.id}', -1)" class="w-9 h-9 flex items-center justify-center font-bold text-slate-400">-</button>
-                        <input type="number" value="${item.quantity || 0}" class="w-10 text-center font-black text-sm border-0 bg-transparent outline-none" onchange="setQty('${item.id}', this.value)" />
-                        <button onclick="updateQty('${item.id}', 1)" class="w-9 h-9 flex items-center justify-center font-bold text-slate-400">+</button>
+                    <div class="flex items-center bg-white rounded-2xl border border-slate-200 shadow-sm p-1">
+                        <button onclick="changeQty('${item.id}', -1)" class="w-10 h-10 flex items-center justify-center text-slate-400 font-bold">-</button>
+                        <input type="number" value="${item.quantity}" class="w-10 text-center font-black text-slate-800 bg-transparent outline-none p-0" onchange="setQty('${item.id}', this.value)" />
+                        <button onclick="changeQty('${item.id}', 1)" class="w-10 h-10 flex items-center justify-center text-slate-400 font-bold">+</button>
                     </div>
                 </div>
             `).join('');
         };
 
-        window.updateQty = async (id, delta) => {
-            if (!currentUser) return;
+        window.changeQty = (id, delta) => {
             const item = inventoryItems.find(i => i.id === id);
-            if (item) {
-                const newQty = Math.max(0, (item.quantity || 0) + delta);
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'items', id);
-                await updateDoc(docRef, { quantity: newQty });
-            }
+            if (item) { item.quantity = Math.max(0, item.quantity + delta); saveData(); renderList(); }
         };
 
-        window.setQty = async (id, val) => {
-            if (!currentUser) return;
-            const newQty = Math.max(0, parseInt(val) || 0);
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'items', id);
-            await updateDoc(docRef, { quantity: newQty });
+        window.setQty = (id, val) => {
+            const item = inventoryItems.find(i => i.id === id);
+            if (item) { item.quantity = Math.max(0, parseInt(val) || 0); saveData(); renderList(); }
         };
 
         window.setCat = (c) => { currentCategory = c; renderList(); };
 
-        function updateStats() {
-            const filled = inventoryItems.filter(i => i.quantity > 0).length;
-            document.getElementById('totalStats').innerText = `${filled} / ${inventoryItems.length}`;
-        }
+        // 同步邏輯：手機端
+        window.generateSyncQR = () => {
+            const activeData = inventoryItems.filter(i => i.quantity > 0).map(i => [i.id, i.quantity]);
+            if (activeData.length === 0) return alert('無數據。');
+            
+            const payload = JSON.stringify(activeData);
+            document.getElementById('syncString').value = payload;
+            
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '';
+            new QRCode(qrContainer, { text: payload, width: 200, height: 200, colorDark : "#4f46e5" });
+            
+            document.getElementById('qrModal').classList.remove('hidden');
+        };
+
+        window.copySyncString = () => {
+            const text = document.getElementById('syncString');
+            text.select();
+            document.execCommand('copy');
+            alert('代碼已複製！請透過通訊軟體傳給電腦。');
+        };
+
+        // 同步邏輯：電腦端
+        window.showImportModal = () => document.getElementById('importModal').classList.remove('hidden');
+        
+        window.processSyncString = () => {
+            const val = document.getElementById('inputSyncString').value;
+            try {
+                const incoming = JSON.parse(val);
+                incoming.forEach(([id, qty]) => {
+                    const target = inventoryItems.find(i => i.id === id);
+                    if (target) target.quantity = qty;
+                });
+                saveData();
+                renderList();
+                closeModal('importModal');
+                alert('同步成功！數據已載入。');
+            } catch (e) {
+                alert('無效的代碼格式。');
+            }
+        };
 
         window.exportToExcel = () => {
-            const data = inventoryItems.filter(i => i.quantity > 0).map(i => ({ '編碼': i.sku, '類別': i.category, '品名': i.name, '盤點數量': i.quantity }));
-            if (data.length === 0) return alert('目前沒有任何盤點數量。');
-            const ws = XLSX.utils.json_to_sheet(data);
+            const exportData = inventoryItems.filter(i => i.quantity > 0).map(i => ({ '編碼': i.sku, '品名': i.name, '數量': i.quantity }));
+            if (exportData.length === 0) return alert('無數據。');
+            const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "盤點數據");
-            XLSX.writeFile(wb, `盤點表_${new Date().toLocaleDateString()}.xlsx`);
-            excelExported = true;
-            document.getElementById('resetBtn').disabled = false;
-            document.getElementById('resetBtn').classList.replace('opacity-50', 'opacity-100');
-            document.getElementById('resetBtn').classList.replace('cursor-not-allowed', 'cursor-pointer');
+            XLSX.utils.book_append_sheet(wb, ws, "盤點結果");
+            XLSX.writeFile(wb, `盤點表_${new Date().getTime()}.xlsx`);
         };
 
-        window.confirmReset = () => {
-            if (!excelExported) return alert('請先匯出 Excel 備份再歸零。');
-            document.getElementById('resetModal').classList.remove('hidden');
-        };
-
-        window.executeReset = async () => {
-            if (!currentUser) return;
-            const batch = writeBatch(db);
-            inventoryItems.forEach(item => {
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'items', item.id);
-                batch.update(docRef, { quantity: 0 });
-            });
-            await batch.commit();
-            closeModal('resetModal');
-            excelExported = false;
-        };
-
-        window.showAddItem = () => document.getElementById('addModal').classList.remove('hidden');
-        window.executeAdd = async () => {
-            if (!currentUser) return;
-            const name = document.getElementById('new_name').value;
-            const sku = document.getElementById('new_sku').value;
-            const cat = document.getElementById('new_cat').value;
-            if (!name) return;
-            const docRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'items'));
-            await setDoc(docRef, { sku: sku || '', name: name, category: cat || '其他', quantity: 0, order: 999 });
-            closeModal('addModal');
-        };
-
+        window.confirmReset = () => { if (confirm('確定清空？')) { inventoryItems.forEach(i => i.quantity = 0); saveData(); renderList(); } };
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 
-        // 啟動流程
-        initAuth();
+        renderList();
+        updateStats();
     </script>
 </body>
 </html>
